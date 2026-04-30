@@ -1,0 +1,72 @@
+version: '3.9'
+
+services:
+
+  # ─── Relay Server ──────────────────────────────────────────────────────────
+  relay:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: voice-overlay-relay
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      LOG_LEVEL: info
+
+      # STT Providers — set your API keys here or use .env file
+      STT_PRIMARY: "${STT_PRIMARY:-deepgram}"
+      STT_FALLBACK: "${STT_FALLBACK:-google}"
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY}"
+      GOOGLE_STT_API_KEY: "${GOOGLE_STT_API_KEY}"
+      GOOGLE_PROJECT_ID: "${GOOGLE_PROJECT_ID}"
+      AZURE_SPEECH_KEY: "${AZURE_SPEECH_KEY}"
+      AZURE_REGION: "${AZURE_REGION:-eastus}"
+
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - overlay-net
+
+  # ─── Agent Dashboard (static served via nginx) ─────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: voice-overlay-dashboard
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    networks:
+      - overlay-net
+    depends_on:
+      - relay
+
+  # ─── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: voice-overlay-redis
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --save ""
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - overlay-net
+
+networks:
+  overlay-net:
+    driver: bridge

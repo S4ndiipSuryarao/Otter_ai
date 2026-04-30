@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Overlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Transparent window base ── */
+    html, body {
+      margin: 0; padding: 0;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+      pointer-events: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── Status indicator (top-right, tiny) ── */
+    #status {
+      position: fixed;
+      top: 8px; right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.4);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #status.visible { opacity: 1; }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #555;
+    }
+    .status-dot.connected     { background: #00ff9d; box-shadow: 0 0 5px #00ff9d; }
+    .status-dot.connecting    { background: #f59e0b; animation: blink 0.8s infinite; }
+    .status-dot.disconnected  { background: #ff4444; }
+    .status-dot.agent-idle    { background: #6366f1; }
+
+    /* ── Overlay container: bottom-center ── */
+    #overlay {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 84vw;
+      min-width: 200px;
+
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 22px 12px;
+
+      font-family: 'Inter', 'Helvetica Neue', sans-serif;
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.45;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+      -webkit-font-smoothing: antialiased;
+
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    #overlay.visible { opacity: 1; }
+
+    /* ── Text segments ── */
+    #final {
+      color: #ffffff;
+    }
+
+    #interim {
+      color: rgba(255, 255, 255, 0.55);
+      /* Italic for in-progress text */
+      font-style: italic;
+    }
+
+    /* ── Reconnecting state ── */
+    #reconnect-notice {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      pointer-events: none;
+      display: none;
+    }
+    #reconnect-notice.visible { display: block; }
+
+    /* ── Agent idle indicator: pulsing dots ── */
+    #thinking {
+      display: none;
+      gap: 5px;
+      align-items: center;
+      margin-top: 4px;
+    }
+    #thinking.visible { display: flex; }
+    .dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      animation: thinking-dot 1.2s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes thinking-dot {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.3; }
+      40%            { transform: scale(1.2); opacity: 1; }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Tiny connection status badge -->
+  <div id="status">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">connecting</span>
+  </div>
+
+  <!-- Main subtitle overlay -->
+  <div id="overlay">
+    <span id="final"></span><span id="interim"></span>
+    <div id="thinking">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+  </div>
+
+  <!-- Reconnecting notice -->
+  <div id="reconnect-notice" id="reconnect">⚡ Reconnecting…</div>
+
+  <script type="module">
+    // ── Tauri event listener ─────────────────────────────────────────────────
+    import { listen } from '@tauri-apps/api/event';
+
+    const overlayEl   = document.getElementById('overlay');
+    const finalEl     = document.getElementById('final');
+    const interimEl   = document.getElementById('interim');
+    const thinkingEl  = document.getElementById('thinking');
+    const statusDot   = document.getElementById('status-dot');
+    const statusText  = document.getElementById('status-text');
+    const statusEl    = document.getElementById('status');
+    const reconnEl    = document.getElementById('reconnect-notice');
+
+    // ── State ────────────────────────────────────────────────────────────────
+    let fadeTimer = null;
+    let showStatusTimer = null;
+    const FADE_DELAY = 6000;   // Hide overlay 6s after last final
+    const STATUS_SHOW = 2000;  // Show status badge for 2s on change
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function showOverlay() {
+      overlayEl.classList.add('visible');
+    }
+
+    function scheduleHide() {
+      clearTimeout(fadeTimer);
+      fadeTimer = setTimeout(() => {
+        overlayEl.classList.remove('visible');
+        finalEl.textContent  = '';
+        interimEl.textContent = '';
+        thinkingEl.classList.remove('visible');
+      }, FADE_DELAY);
+    }
+
+    function flashStatus(cls, text) {
+      statusDot.className = `status-dot ${cls}`;
+      statusText.textContent = text;
+      statusEl.classList.add('visible');
+      clearTimeout(showStatusTimer);
+      showStatusTimer = setTimeout(() => statusEl.classList.remove('visible'), STATUS_SHOW);
+    }
+
+    // ── Transcript event ──────────────────────────────────────────────────────
+    // Payload: { type, text, isFinal, confidence }
+
+    await listen('transcript', (event) => {
+      const { text, isFinal, confidence } = event.payload;
+      thinkingEl.classList.remove('visible');
+
+      if (isFinal) {
+        if (text && text.trim()) {
+          finalEl.textContent += text.trim() + ' ';
+        }
+        interimEl.textContent = '';
+
+        // Trim displayed text to last ~200 chars to prevent overflow
+        if (finalEl.textContent.length > 280) {
+          finalEl.textContent = finalEl.textContent.slice(-200);
+        }
+
+        // Low confidence indicator
+        if (confidence < 0.65) {
+          const badge = document.createElement('span');
+          badge.textContent = '⚠ ';
+          badge.style.cssText = 'color:rgba(245,158,11,0.7);font-size:0.75em;';
+          finalEl.appendChild(badge);
+        }
+
+        showOverlay();
+        scheduleHide();
+      } else {
+        // Interim result
+        interimEl.textContent = text || '';
+        showOverlay();
+        clearTimeout(fadeTimer); // Don't hide while streaming
+      }
+    });
+
+    // ── Agent status event ───────────────────────────────────────────────────
+
+    await listen('agent-status', (event) => {
+      const status = event.payload?.status;
+      if (status === 'idle') {
+        // Agent stopped talking but no transcript yet — show thinking dots
+        if (!finalEl.textContent && !interimEl.textContent) {
+          thinkingEl.classList.add('visible');
+          showOverlay();
+          // Hide thinking after 5s if no response
+          setTimeout(() => thinkingEl.classList.remove('visible'), 5000);
+        }
+        flashStatus('agent-idle', 'agent idle');
+      } else if (status === 'speaking') {
+        thinkingEl.classList.remove('visible');
+        flashStatus('connected', 'agent speaking');
+      } else if (status === 'disconnected') {
+        flashStatus('disconnected', 'agent disconnected');
+        finalEl.textContent = '';
+        interimEl.textContent = '';
+        thinkingEl.classList.remove('visible');
+        // Show a temporary message
+        overlayEl.classList.add('visible');
+        interimEl.textContent = 'Agent reconnecting…';
+        fadeTimer = setTimeout(() => {
+          overlayEl.classList.remove('visible');
+          interimEl.textContent = '';
+        }, 4000);
+      }
+    });
+
+    // ── Session events ────────────────────────────────────────────────────────
+
+    await listen('session-assigned', (_event) => {
+      flashStatus('connected', 'connected');
+      reconnEl.classList.remove('visible');
+    });
+
+    await listen('stt-fallback', (event) => {
+      flashStatus('connecting', `stt: ${event.payload}`);
+    });
+
+    // ── Keyboard shortcuts (handled even if click-through) ───────────────────
+    // Ctrl+Shift+H is intercepted by Rust; this is a backup for non-captured keys.
+
+    document.addEventListener('keydown', (e) => {
+      // Emergency hide: Escape
+      if (e.key === 'Escape') {
+        overlayEl.classList.remove('visible');
+        clearTimeout(fadeTimer);
+      }
+    });
+  </script>
+</body>
+</html>

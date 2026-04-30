@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Overlay — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --bg-2:    #161b22;
+      --bg-3:    #1c2230;
+      --border:  #21262d;
+      --text:    #e6edf3;
+      --muted:   #6e7681;
+      --accent:  #00ff9d;
+      --red:     #ff4444;
+      --yellow:  #f59e0b;
+      --blue:    #58a6ff;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --font:      'IBM Plex Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 24px;
+      gap: 20px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    .version {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .card-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    /* ── Form elements ── */
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 4px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+    select option { background: var(--bg-2); }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 9px 20px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-3);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+    .btn:hover { background: #2d3748; border-color: #4a5568; }
+    .btn.primary {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      font-weight: 500;
+    }
+    .btn.primary:hover { background: #00e58a; }
+    .btn.danger { color: var(--red); border-color: var(--red); }
+    .btn.danger:hover { background: rgba(255,68,68,0.1); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .status-indicator {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .status-indicator.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    .status-indicator.connecting { background: var(--yellow); animation: blink 0.8s infinite; }
+    .status-indicator.error { background: var(--red); }
+    .status-text {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Device list ── */
+    .device-list {
+      max-height: 100px;
+      overflow-y: auto;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 0;
+    }
+    .device-item {
+      padding: 5px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .device-item:hover { background: #2d3748; color: var(--text); }
+    .device-item.selected { color: var(--accent); }
+
+    /* ── Hotkey badge ── */
+    .hotkey {
+      display: inline-block;
+      padding: 2px 6px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* ── Actions row ── */
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .actions .spacer { flex: 1; }
+
+    /* ── Log ── */
+    #log {
+      flex: 1;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      overflow-y: auto;
+      max-height: 80px;
+      line-height: 1.6;
+    }
+    .log-entry { }
+    .log-entry.info  { color: var(--muted); }
+    .log-entry.ok    { color: var(--accent); }
+    .log-entry.warn  { color: var(--yellow); }
+    .log-entry.error { color: var(--red); }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); }
+
+    @keyframes blink {
+      0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <div class="header">
+      <span class="logo">◉ VOICE OVERLAY</span>
+      <span class="version">v1.0.0</span>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar">
+      <span class="status-indicator" id="status-indicator"></span>
+      <span class="status-text" id="status-text">Not connected</span>
+    </div>
+
+    <!-- Server Config -->
+    <div class="card">
+      <div class="card-title">Server</div>
+      <div>
+        <label>Relay Server URL</label>
+        <input type="text" id="server-url" value="ws://localhost:8080" placeholder="ws://your-server:8080" />
+      </div>
+    </div>
+
+    <!-- Audio Device -->
+    <div class="card">
+      <div class="card-title">Audio Device</div>
+      <div>
+        <label>Capture Device</label>
+        <select id="audio-device">
+          <option value="">Auto-detect (BlackHole / VB-Cable / default)</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+        Windows: uses WASAPI loopback automatically.<br>
+        macOS: install <a href="https://github.com/ExistentialAudio/BlackHole" style="color:var(--blue)">BlackHole</a> and set as audio output.
+      </div>
+    </div>
+
+    <!-- STT Provider -->
+    <div class="card">
+      <div class="card-title">Speech-to-Text</div>
+      <div>
+        <label>Primary Provider</label>
+        <select id="stt-primary">
+          <option value="deepgram">Deepgram Nova-2 (~200ms, $0.0059/min)</option>
+          <option value="google">Google Cloud STT v2 (~300ms, $0.0096/min)</option>
+          <option value="azure">Azure Speech (~250ms, $0.0100/min)</option>
+        </select>
+      </div>
+      <div>
+        <label>Fallback Provider</label>
+        <select id="stt-fallback">
+          <option value="google">Google Cloud STT v2</option>
+          <option value="azure">Azure Speech</option>
+          <option value="deepgram">Deepgram Nova-2</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Hotkeys reference -->
+    <div class="card">
+      <div class="card-title">Hotkeys</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted)">
+        <div><span class="hotkey">Ctrl+Shift+H</span> / <span class="hotkey">Cmd+Shift+H</span> — Toggle overlay visibility</div>
+        <div><span class="hotkey">Escape</span> — Hide overlay immediately</div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div id="log"></div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn" id="btn-devices" onclick="loadDevices()">Refresh Devices</button>
+      <div class="spacer"></div>
+      <button class="btn danger" id="btn-stop" onclick="stopSession()" disabled>Stop</button>
+      <button class="btn primary" id="btn-start" onclick="startSession()">Start Session</button>
+    </div>
+
+  </div>
+
+  <script type="module">
+    import { invoke } from '@tauri-apps/api/core';
+    import { listen } from '@tauri-apps/api/event';
+
+    const logEl = document.getElementById('log');
+    const statusInd = document.getElementById('status-indicator');
+    const statusTxt = document.getElementById('status-text');
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+
+    function log(msg, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString([], { hour12: false });
+      entry.textContent = `[${time}] ${msg}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      // Keep last 100 entries
+      while (logEl.children.length > 100) logEl.removeChild(logEl.firstChild);
+    }
+
+    function setStatus(status, text) {
+      statusInd.className = `status-indicator ${status}`;
+      statusTxt.textContent = text;
+    }
+
+    window.startSession = async function() {
+      const url = document.getElementById('server-url').value.trim();
+      if (!url) { log('Enter a server URL', 'warn'); return; }
+
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      setStatus('connecting', 'Connecting…');
+      log(`Connecting to ${url}`, 'info');
+
+      try {
+        await invoke('start_session', { serverUrl: url });
+        log('Session started — overlay is active', 'ok');
+      } catch (e) {
+        log(`Failed: ${e}`, 'error');
+        setStatus('error', 'Connection failed');
+        btnStart.disabled = false;
+        btnStop.disabled = true;
+      }
+    };
+
+    window.stopSession = async function() {
+      await invoke('stop_session');
+      setStatus('', 'Disconnected');
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+      log('Session stopped', 'warn');
+    };
+
+    window.loadDevices = async function() {
+      try {
+        const devices = await invoke('list_audio_devices');
+        const sel = document.getElementById('audio-device');
+        sel.innerHTML = '<option value="">Auto-detect</option>';
+        for (const d of devices) {
+          const opt = document.createElement('option');
+          opt.value = d;
+          opt.textContent = d;
+          sel.appendChild(opt);
+        }
+        log(`Found ${devices.length} audio devices`, 'ok');
+      } catch (e) {
+        log(`Device list error: ${e}`, 'error');
+      }
+    };
+
+    // ── Tauri event listeners ─────────────────────────────────────────────────
+
+    await listen('session-assigned', (e) => {
+      setStatus('connected', `Connected — session ${e.payload.slice(0,8)}`);
+      log(`Session assigned: ${e.payload}`, 'ok');
+    });
+
+    await listen('agent-status', (e) => {
+      if (e.payload?.status === 'disconnected') {
+        setStatus('connecting', 'Agent reconnecting…');
+        log('Agent disconnected — waiting for reconnect', 'warn');
+      }
+    });
+
+    await listen('stt-fallback', (e) => {
+      log(`STT provider switched to: ${e.payload}`, 'warn');
+    });
+
+    // Load devices on startup
+    loadDevices();
+    log('Voice Overlay ready', 'ok');
+  </script>
+</body>
+</html>
